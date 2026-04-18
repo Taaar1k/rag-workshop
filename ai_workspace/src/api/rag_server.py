@@ -135,6 +135,10 @@ async def chat_completions(request: ChatCompletionRequest):
     Uses Qdrant for vector search and LLM for response generation.
     """
     try:
+        # Validate messages
+        if not request.messages:
+            raise HTTPException(status_code=422, detail="messages field is required and cannot be empty")
+        
         # Extract query from messages
         query = request.messages[-1].content if request.messages else ""
         
@@ -163,6 +167,9 @@ async def chat_completions(request: ChatCompletionRequest):
                 "total_tokens": len(query.split()) + len(rag_response["answer"].split())
             }
         )
+    except HTTPException:
+        # Re-raise HTTP exceptions (422, 400, etc.) without wrapping
+        raise
     except Exception as e:
         logger.error(f"Error in chat completions: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -249,27 +256,35 @@ async def index_document(document: Document):
 
 # Utility functions
 def initialize_qdrant():
-    """Initialize Qdrant client and create collection if not exists."""
+    """Initialize Qdrant client and create collection if not exists.
+    
+    Returns None if Qdrant is not available (graceful degradation).
+    """
     global qdrant_client_instance
     
-    host = os.getenv("QDRANT_HOST", "localhost")
-    port = int(os.getenv("QDRANT_PORT", 6333))
-    
-    qdrant_client_instance = qdrant_client.QdrantClient(host=host, port=port)
-    
-    # Create collection if it doesn't exist
-    collection_name = "rag_documents"
-    if not qdrant_client_instance.collection_exists(collection_name):
-        qdrant_client_instance.create_collection(
-            collection_name=collection_name,
-            vectors_config=VectorParams(
-                size=768,  # Default embedding dimension
-                distance=Distance.COSINE
+    try:
+        host = os.getenv("QDRANT_HOST", "localhost")
+        port = int(os.getenv("QDRANT_PORT", 6333))
+        
+        qdrant_client_instance = qdrant_client.QdrantClient(host=host, port=port)
+        
+        # Create collection if it doesn't exist
+        collection_name = "rag_documents"
+        if not qdrant_client_instance.collection_exists(collection_name):
+            qdrant_client_instance.create_collection(
+                collection_name=collection_name,
+                vectors_config=VectorParams(
+                    size=768,  # Default embedding dimension
+                    distance=Distance.COSINE
+                )
             )
-        )
-        logger.info(f"Created Qdrant collection: {collection_name}")
-    
-    return qdrant_client_instance
+        logger.info(f"Initialized Qdrant client at {host}:{port}")
+        
+        return qdrant_client_instance
+    except Exception as e:
+        logger.warning(f"Qdrant initialization failed: {str(e)}, running in offline mode")
+        qdrant_client_instance = None
+        return None
 
 
 def initialize_embedding_model():
@@ -358,7 +373,10 @@ def perform_rag_query(query: str, top_k: int = 5, temperature: float = 0.7) -> D
     
     # Generate response with LLM
     if llm_model_instance is None:
-        initialize_llm_model()
+        try:
+            initialize_llm_model()
+        except Exception as e:
+            logger.warning(f"Failed to initialize local LLM: {str(e)}, using fallback")
     
     if llm_model_instance:
         # Use local LLM
@@ -368,13 +386,16 @@ Question: {query}
 
 Answer:"""
         
-        response = llm_model_instance(
-            prompt,
-            max_tokens=512,
-            temperature=temperature
-        )
-        
-        answer = response["choices"][0]["text"].strip()
+        try:
+            response = llm_model_instance(
+                prompt,
+                max_tokens=512,
+                temperature=temperature
+            )
+            answer = response["choices"][0]["text"].strip()
+        except Exception as e:
+            logger.warning(f"LLM generation failed: {str(e)}, using fallback")
+            answer = f"Based on the retrieved documents:\n\n{context}\n\nQuestion: {query}"
     else:
         # Fallback: use retrieved context as answer
         answer = f"Based on the retrieved documents:\n\n{context}\n\nQuestion: {query}"

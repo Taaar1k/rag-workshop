@@ -202,9 +202,13 @@ class TestModelLoading:
             pytest.skip("sentence-transformers not installed")
     
     @pytest.mark.integration
-    @patch('src.api.rag_server.Llama')
+    @patch('llama_cpp.Llama')
     def test_llm_initialization(self, mock_llama):
-        """Test LLM model initialization."""
+        """Test LLM model initialization.
+        
+        Mocks llama_cpp.Llama directly since the import happens inside
+        the initialize_llm_model() function.
+        """
         mock_llama.return_value = Mock()
         
         from src.api.rag_server import initialize_llm_model
