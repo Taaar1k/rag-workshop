@@ -3,6 +3,10 @@
 ## TODO / IN_PROGRESS / BLOCKED
 _(empty — all known failures resolved)_
 
+## DONE — 2026-04-18 push
+- [x] [TASK-021](./TASK-021.md) Fix import path in test_security_integration.py (Code — `ai_workspace.src` → `src`)
+- [x] [TASK-022](./TASK-022.md) Add PyJWT>=2.0.0 to requirements_mcp.txt, install dependency
+
 ## DONE — 2026-04-17 push
 - [x] [TASK-019-v3](./TASK-019-v3.md) Mark 2 residual llama/HF-dependent tests in test_rag_server.py as integration (Code)
 - [x] [TASK-020-v2](./TASK-020-v2.md) Restore `use_memory_fallback` semantics; fix crash test via fixture (Code, 51/51 persistence tests green)

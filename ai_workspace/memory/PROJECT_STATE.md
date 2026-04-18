@@ -52,3 +52,6 @@
 - 2025-04-13: Модель ембедингів знайдено (B01 RESOLVED)
 - 2025-04-13: TASK-002 DONE — test_llama_embedding.py працює (768-dim, 51.66ms)
 - 2026-04-14: TASK-012 DONE — Multi-Modal Support implemented (CLIP encoder, unified embedding space, cross-modal search, all tests passing)
+- 2026-04-18: TASK-021 DONE — Fixed import path in test_security_integration.py (ai_workspace.src → src)
+- 2026-04-18: TASK-022 DONE — Added PyJWT>=2.0.0 to requirements_mcp.txt, installed dependency
+- 2026-04-18: Test collection restored — 296/304 tests collected (0 errors, was 253/261 with 2 collection errors)

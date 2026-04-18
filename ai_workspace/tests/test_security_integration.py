@@ -7,10 +7,10 @@ from datetime import datetime
 from fastapi.testclient import TestClient
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
-from ai_workspace.src.security.tenant_context import TenantContext, TenantContextManager
-from ai_workspace.src.security.tenant_api import TenantAPI
-from ai_workspace.src.security.row_level_security import RowLevelSecurity
-from ai_workspace.src.security.audit import AuditLogger, AuditAction
+from src.security.tenant_context import TenantContext, TenantContextManager
+from src.security.tenant_api import TenantAPI
+from src.security.row_level_security import RowLevelSecurity
+from src.security.audit import AuditLogger, AuditAction
 
 
 class TestTenantAPIIntegration:
