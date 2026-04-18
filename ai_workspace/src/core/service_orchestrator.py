@@ -106,7 +106,11 @@ class ServiceManager:
             ),
             "llm": ServiceConfig(
                 name="llm",
-                command=["llama.cpp", "-m", "models/llm/Llama-3-8B-Instruct-Q4_K_M.gguf", "-c", "2048"],
+                command=[
+                    "llama.cpp",
+                    "-m", os.getenv("LLM_MODEL_PATH", "models/llm/default.gguf"),
+                    "-c", "2048"
+                ],
                 health_check_url="http://localhost:8080/health",
                 startup_timeout=30.0,
                 shutdown_timeout=5.0

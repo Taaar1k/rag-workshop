@@ -17,9 +17,9 @@ mcp = FastMCP("rag-mcp-server")
 
 # Configuration
 CHROMA_PERSIST_DIR = "./chroma_db"
-EMBEDDING_MODEL = "nomic-ai/nomic-embed-text-v1.5"
-LLM_ENDPOINT = "http://localhost:8080/v1/chat/completions"
-LLM_MODEL = "Llama-3-8B-Instruct"
+EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL_NAME", "nomic-ai/nomic-embed-text-v1.5")
+LLM_ENDPOINT = os.getenv("LLM_ENDPOINT", "http://localhost:8080/v1/chat/completions")
+LLM_MODEL = os.getenv("LLM_MODEL_NAME", "Llama-3-8B-Instruct")
 
 # Global variables
 vector_store: Optional[Chroma] = None

@@ -305,7 +305,7 @@ def initialize_llm_model():
     try:
         from llama_cpp import Llama
         
-        model_path = os.getenv("LLM_MODEL_PATH", "models/llm/Llama-3-8B-Instruct-Q4_K_M.gguf")
+        model_path = os.getenv("LLM_MODEL_PATH", "models/llm/default.gguf")
         
         llm_model_instance = Llama(
             model_path=model_path,

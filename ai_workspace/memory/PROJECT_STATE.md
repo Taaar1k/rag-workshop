@@ -55,3 +55,6 @@
 - 2026-04-18: TASK-021 DONE — Fixed import path in test_security_integration.py (ai_workspace.src → src)
 - 2026-04-18: TASK-022 DONE — Added PyJWT>=2.0.0 to requirements_mcp.txt, installed dependency
 - 2026-04-18: Test collection restored — 296/304 tests collected (0 errors, was 253/261 with 2 collection errors)
+- 2026-04-18: TASK-023 DONE — Replaced hardcoded model paths with environment variables (LLM_MODEL_PATH, LLM_MODEL_NAME, EMBEDDING_MODEL_NAME, LLM_ENDPOINT)
+- 2026-04-18: TASK-023 DONE — Created .env.example with all configurable parameters
+- 2026-04-18: TASK-023 DONE — Modified files: src/api/rag_server.py, src/core/service_orchestrator.py, src/mcp_server.py
