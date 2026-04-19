@@ -6,6 +6,7 @@ Provides OpenAI-compatible endpoints for RAG operations.
 import os
 import sys
 import logging
+import yaml
 from typing import List, Dict, Optional, Any
 from pathlib import Path
 from datetime import datetime
@@ -53,6 +54,7 @@ settings = Settings()
 qdrant_client_instance: Optional[qdrant_client.QdrantClient] = None
 embedding_model_instance: Any = None
 llm_model_instance: Any = None
+directory_scanner_instance: Any = None
 
 
 # Pydantic Models for OpenAI-compatible API
@@ -416,28 +418,34 @@ Answer:"""
 async def startup_event():
     """Initialize services on server startup."""
     logger.info("Starting RAG server...")
-    
+
     # Initialize Qdrant
     try:
         initialize_qdrant()
         logger.info("Qdrant initialized successfully")
     except Exception as e:
         logger.warning(f"Qdrant initialization failed: {str(e)}")
-    
+
     # Initialize embedding model
     try:
         initialize_embedding_model()
         logger.info("Embedding model initialized successfully")
     except Exception as e:
         logger.error(f"Embedding model initialization failed: {str(e)}")
-    
+
     # Initialize LLM model (optional)
     try:
         initialize_llm_model()
         logger.info("LLM model initialized successfully")
     except Exception as e:
         logger.warning(f"LLM model initialization failed: {str(e)}")
-    
+
+    # Initialize directory scanner
+    try:
+        _init_directory_scanner()
+    except Exception as e:
+        logger.warning(f"Directory scanner initialization failed: {str(e)}")
+
     logger.info("RAG server started successfully")
 
 
@@ -446,11 +454,87 @@ async def startup_event():
 async def shutdown_event():
     """Cleanup on server shutdown."""
     logger.info("Shutting down RAG server...")
-    
+
     if qdrant_client_instance:
         qdrant_client_instance.close()
-    
+
+    # Stop directory scanner
+    if directory_scanner_instance:
+        try:
+            await directory_scanner_instance.stop()
+            logger.info("Directory scanner stopped")
+        except Exception as e:
+            logger.error(f"Error stopping directory scanner: {str(e)}")
+
     logger.info("RAG server shutdown complete")
+
+
+def _load_scanning_config() -> Optional[Dict[str, Any]]:
+    """Load directory_scanning config from default.yaml."""
+    config_path = Path(__file__).parent.parent.parent / "config" / "default.yaml"
+    if not config_path.exists():
+        return None
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            config = yaml.safe_load(f)
+        return config.get("directory_scanning")
+    except Exception as e:
+        logger.warning(f"Failed to load directory_scanning config: {str(e)}")
+        return None
+
+
+def _init_directory_scanner():
+    """Initialize DirectoryScannerWorker from config."""
+    global directory_scanner_instance
+    config = _load_scanning_config()
+    if not config:
+        logger.info("No directory_scanning config found. Scanning disabled.")
+        return
+
+    enabled = config.get("enabled", True)
+    if not enabled:
+        logger.info("Directory scanning is disabled (enabled: false).")
+        return
+
+    watched_dirs = config.get("watched_directories", [])
+    if not watched_dirs:
+        logger.info("No watched directories configured. Scanning disabled.")
+        return
+
+    state_file = config.get("state", {}).get("persistence_file", "./ai_workspace/memory/index_state.json")
+    debounce_ms = config.get("scan", {}).get("debounce_ms", 500)
+    poll_interval_s = config.get("scan", {}).get("poll_interval_s", 60)
+    allowed_exts = config.get("allowed_extensions", [".txt", ".md", ".json", ".csv"])
+    chunk_size = config.get("indexing", {}).get("chunk_size", 512)
+    chunk_overlap = config.get("indexing", {}).get("chunk_overlap", 50)
+
+    # Initialize MemoryManager and IncrementalIndexManager
+    from core.memory_manager import MemoryManager, MemoryConfig
+    from core.incremental_index_manager import IncrementalIndexManager
+
+    mem_config = MemoryConfig()
+    mem_manager = MemoryManager(mem_config)
+    index_mgr = IncrementalIndexManager(
+        memory_manager=mem_manager,
+        state_file=state_file,
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
+        allowed_extensions=allowed_exts,
+    )
+
+    # Create DirectoryScannerWorker
+    from core.directory_scanner import DirectoryScannerWorker
+    directory_scanner_instance = DirectoryScannerWorker(
+        index_manager=index_mgr,
+        watched_directories=watched_dirs,
+        debounce_ms=debounce_ms,
+        poll_interval_s=poll_interval_s,
+        enabled=True,
+    )
+
+    # Start the scanner
+    asyncio.get_event_loop().run_until_complete(directory_scanner_instance.start())
+    logger.info("Directory scanner initialized and started")
 
 
 if __name__ == "__main__":

@@ -10,7 +10,10 @@ Memory Types:
 
 import os
 import json
+import logging
 import uuid
+
+logger = logging.getLogger(__name__)
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -677,7 +680,49 @@ class MemoryManager:
         for model_id, memory in self._memories.items():
             stats[model_id] = memory.get_stats()
         return stats
-    
+
+    def delete_documents_by_source(self, source: str) -> int:
+        """
+        Delete all chunks from ChromaDB that have metadata['source'] == source.
+
+        Args:
+            source: The source file path to match.
+
+        Returns:
+            Number of documents deleted (or None if count unavailable).
+        """
+        vector_memory = self.get_vector_memory("default")
+        try:
+            result = vector_memory.collection.delete(where={"source": source})
+            logger.info("Deleted documents for source: %s", source)
+            return result
+        except Exception as e:
+            logger.error("Failed to delete documents by source %s: %s", source, e)
+            return 0
+
+    def get_stats_by_source(self) -> Dict[str, Any]:
+        """
+        Get statistics grouped by source file.
+
+        Returns:
+            Dict mapping source paths to their document counts.
+        """
+        vector_memory = self.get_vector_memory("default")
+        try:
+            # Get all documents with their metadata
+            result = vector_memory.collection.get(
+                include=["metadatas"]
+            )
+            stats: Dict[str, int] = {}
+            if result["metadatas"]:
+                for metadata in result["metadatas"]:
+                    source = metadata.get("source", "unknown")
+                    stats[source] = stats.get(source, 0) + 1
+            return {"sources": stats, "total_documents": sum(stats.values())}
+        except Exception as e:
+            logger.error("Failed to get stats by source: %s", e)
+            return {"sources": {}, "total_documents": 0}
+
     def close(self) -> None:
         """Close all memory connections."""
         self._memories.clear()
