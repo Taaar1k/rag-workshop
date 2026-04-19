@@ -17,3 +17,25 @@ retrieval:
 server:
   host: "0.0.0.0"
   port: 8000
+
+directory_scanning:
+  enabled: true
+  watched_directories:
+    - path: "./data/documents"
+      recursive: true
+    - path: "./data/knowledge-base"
+      recursive: true
+  allowed_extensions:
+    - ".txt"
+    - ".md"
+    - ".json"
+    - ".csv"
+  scan:
+    recursive: true
+    debounce_ms: 500
+    poll_interval_s: 60
+  indexing:
+    chunk_size: 512
+    chunk_overlap: 50
+  state:
+    persistence_file: "./ai_workspace/memory/index_state.json"
