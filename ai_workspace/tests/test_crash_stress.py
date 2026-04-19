@@ -755,6 +755,35 @@ class TestRecoveryTests:
         assert len(loaded) == 1
         assert loaded[0].content == "Before crash"
     
+    def test_data_survives_restart_with_memory_fallback(self, temp_storage_path):
+        """Test that data survives a process restart when use_memory_fallback=True (TASK-027 fix).
+        
+        This test verifies that use_memory_fallback=True still persists data to disk.
+        After TASK-027 fix, both use_memory_fallback=True and False modes persist to disk.
+        """
+        # Instance 1: Save data with use_memory_fallback=True
+        p1 = MemoryPersistence(
+            storage_path=temp_storage_path,
+            use_memory_fallback=True,
+            auto_save=True
+        )
+        p1.save_conversation([
+            Message(role="user", content="test message with fallback", timestamp="2026-04-15T10:00:00")
+        ], "crash_test_session_mf")
+        del p1  # Simulate process exit
+        
+        # Instance 2: Load data (simulates restart)
+        p2 = MemoryPersistence(
+            storage_path=temp_storage_path,
+            use_memory_fallback=True,
+            auto_save=True
+        )
+        loaded = p2.load_conversation("crash_test_session_mf")
+        
+        assert len(loaded) == 1, f"Expected 1 message, got {len(loaded)}"
+        assert loaded[0].role == "user"
+        assert loaded[0].content == "test message with fallback"
+    
     def test_partial_save_recovery(self, temp_storage_path):
         """Test recovery when save is interrupted."""
         persistence = MemoryPersistence(

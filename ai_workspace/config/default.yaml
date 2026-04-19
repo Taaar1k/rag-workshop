@@ -39,3 +39,10 @@ directory_scanning:
     chunk_overlap: 50
   state:
     persistence_file: "./ai_workspace/memory/index_state.json"
+
+rate_limiting:
+  enabled: true
+  anonymous_limit: "100 per minute"
+  authenticated_limit: "1000 per minute"
+  burst_limit: "20 per minute"
+  storage_uri: "memory://"
