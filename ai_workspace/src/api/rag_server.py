@@ -7,9 +7,11 @@ import os
 import sys
 import logging
 import yaml
+import asyncio
 from typing import List, Dict, Optional, Any
 from pathlib import Path
 from datetime import datetime
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,6 +19,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 import qdrant_client
 from qdrant_client.models import VectorParams, Distance, PointStruct, Filter, FilterSelector, FieldCondition, MatchValue
+from slowapi.errors import RateLimitExceeded
 
 # Add src to path for imports
 sys.path.append(str(Path(__file__).parent.parent.parent))
@@ -26,6 +29,12 @@ try:
 except ImportError:
     from ..core.config import Settings
 
+# Import rate limiter
+from .rate_limiter import limiter, rate_limit_exceeded_handler, get_rate_limit_for_user
+
+# Import health checker
+from .health_check import health_checker
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -33,11 +42,42 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Initialize FastAPI app
+# Import scanner manager
+from .scanner_manager import (
+    initialize_scanner,
+    start_scanner,
+    stop_scanner,
+    get_scanner_status,
+    router as scanner_router,
+)
+
+# Load config for scanner
+_config_path = Path(__file__).parent.parent.parent / "config" / "default.yaml"
+_dir_scan_config = {}
+if _config_path.exists():
+    with open(_config_path, "r", encoding="utf-8") as f:
+        _cfg = yaml.safe_load(f)
+        _dir_scan_config = _cfg.get("directory_scanning", {})
+
+
+@asynccontextmanager
+async def lifespan(app_fastapi: FastAPI):
+    # Startup
+    logger.info("RAG server lifespan startup...")
+    await initialize_scanner(_dir_scan_config)
+    await start_scanner()
+    yield
+    # Shutdown
+    logger.info("RAG server lifespan shutdown...")
+    await stop_scanner()
+
+
+# Initialize FastAPI app with lifespan
 app = FastAPI(
     title="Shared RAG API",
     description="OpenAI-compatible RAG server with Qdrant vector storage",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan,
 )
 
 # Add CORS middleware
@@ -48,6 +88,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Add rate limit exception handler
+app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
+
+# Add slowapi state for rate limit tracking
+app.state.limiter = limiter
+
+# Include scanner router
+app.include_router(scanner_router, prefix="/scanner", tags=["scanner"])
 
 # Global instances
 settings = Settings()
@@ -118,43 +167,72 @@ class RAGQueryResponse(BaseModel):
     metadata: Dict[str, Any]
 
 
-# Health check endpoint
+# Health check endpoints (exempt from rate limiting)
 @app.get("/health")
-async def health_check():
-    """Health check endpoint for the RAG server."""
+@limiter.exempt
+async def health_check(request: Request):
+    """Lightweight health check (uses cache)."""
+    health = await health_checker.get_overall_health(verbose=False)
+    return health
+
+
+@app.get("/health/verbose")
+@limiter.exempt
+async def health_check_verbose(request: Request):
+    """Detailed health check (no cache, checks all components)."""
+    health = await health_checker.get_overall_health(verbose=True)
+    health["cache_enabled"] = False
+    return health
+
+
+@app.get("/metrics")
+@limiter.exempt
+async def metrics(request: Request):
+    """Prometheus-compatible metrics endpoint."""
+    health = await health_checker.get_overall_health(verbose=False)
+    metrics_output = health_checker.get_prometheus_metrics(health)
+    return JSONResponse(content=metrics_output, media_type="text/plain")
+
+
+# Rate limit status endpoint
+@app.get("/rate-limit-status")
+@limiter.exempt
+async def rate_limit_status(request: Request):
+    """Get current rate limit status for the caller."""
     return {
-        "status": "healthy",
-        "timestamp": datetime.now().isoformat(),
-        "version": "1.0.0"
+        "limit": getattr(request.state, 'rate_limit', None),
+        "remaining": getattr(request.state, 'rate_limit_remaining', None),
+        "reset": getattr(request.state, 'rate_limit_reset', None)
     }
 
 
 # OpenAI-compatible endpoints
 @app.post("/v1/chat/completions")
-async def chat_completions(request: ChatCompletionRequest):
+@limiter.limit("1000 per minute")
+async def chat_completions(request: Request, body: ChatCompletionRequest):
     """
     OpenAI-compatible endpoint for chat completions with RAG.
     Uses Qdrant for vector search and LLM for response generation.
     """
     try:
         # Validate messages
-        if not request.messages:
+        if not body.messages:
             raise HTTPException(status_code=422, detail="messages field is required and cannot be empty")
         
         # Extract query from messages
-        query = request.messages[-1].content if request.messages else ""
+        query = body.messages[-1].content if body.messages else ""
         
         # Perform RAG query
         rag_response = perform_rag_query(
             query=query,
-            top_k=request.top_k if hasattr(request, 'top_k') else 5,
-            temperature=request.temperature
+            top_k=body.top_k if hasattr(body, 'top_k') else 5,
+            temperature=body.temperature
         )
         
         return ChatCompletionResponse(
             id=f"chatcmpl-{int(datetime.now().timestamp())}",
             created=int(datetime.now().timestamp()),
-            model=request.model,
+            model=body.model,
             choices=[{
                 "index": 0,
                 "message": {
@@ -178,13 +256,14 @@ async def chat_completions(request: ChatCompletionRequest):
 
 
 @app.post("/v1/embeddings")
-async def create_embeddings(request: EmbeddingRequest):
+@limiter.limit("1000 per minute")
+async def create_embeddings(request: Request, body: EmbeddingRequest):
     """
     OpenAI-compatible endpoint for embedding generation.
     Uses sentence-transformers for embedding generation.
     """
     try:
-        inputs = request.input if isinstance(request.input, list) else [request.input]
+        inputs = body.input if isinstance(body.input, list) else [body.input]
         
         # Generate embeddings
         embeddings = []
@@ -199,7 +278,7 @@ async def create_embeddings(request: EmbeddingRequest):
         return EmbeddingResponse(
             object="list",
             data=embeddings,
-            model=request.model,
+            model=body.model,
             usage={
                 "prompt_tokens": sum(len(text.split()) for text in inputs),
                 "total_tokens": sum(len(text.split()) for text in inputs)
@@ -212,15 +291,16 @@ async def create_embeddings(request: EmbeddingRequest):
 
 # RAG-specific endpoints
 @app.post("/rag/query")
-async def rag_query(request: RAGQueryRequest):
+@limiter.limit("1000 per minute")
+async def rag_query(request: Request, body: RAGQueryRequest):
     """
     Custom RAG query endpoint with vector search and LLM generation.
     """
     try:
         response = perform_rag_query(
-            query=request.query,
-            top_k=request.top_k,
-            temperature=request.temperature
+            query=body.query,
+            top_k=body.top_k,
+            temperature=body.temperature
         )
         return response
     except Exception as e:
@@ -229,7 +309,8 @@ async def rag_query(request: RAGQueryRequest):
 
 
 @app.post("/rag/index")
-async def index_document(document: Document):
+@limiter.limit("1000 per minute")
+async def index_document(request: Request, document: Document):
     """
     Index a document into the vector store.
     """
@@ -413,7 +494,7 @@ Answer:"""
     }
 
 
-# Startup event
+# Startup event (kept for backward compatibility; scanner now uses lifespan)
 @app.on_event("startup")
 async def startup_event():
     """Initialize services on server startup."""
@@ -440,16 +521,10 @@ async def startup_event():
     except Exception as e:
         logger.warning(f"LLM model initialization failed: {str(e)}")
 
-    # Initialize directory scanner
-    try:
-        _init_directory_scanner()
-    except Exception as e:
-        logger.warning(f"Directory scanner initialization failed: {str(e)}")
-
     logger.info("RAG server started successfully")
 
 
-# Shutdown event
+# Shutdown event (kept for backward compatibility; scanner now uses lifespan)
 @app.on_event("shutdown")
 async def shutdown_event():
     """Cleanup on server shutdown."""
@@ -457,14 +532,6 @@ async def shutdown_event():
 
     if qdrant_client_instance:
         qdrant_client_instance.close()
-
-    # Stop directory scanner
-    if directory_scanner_instance:
-        try:
-            await directory_scanner_instance.stop()
-            logger.info("Directory scanner stopped")
-        except Exception as e:
-            logger.error(f"Error stopping directory scanner: {str(e)}")
 
     logger.info("RAG server shutdown complete")
 

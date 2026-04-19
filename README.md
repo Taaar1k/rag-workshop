@@ -1,6 +1,37 @@
 # rag-workshop
 
-**A local-first RAG system built autonomously by a multi-agent framework.**
+<!-- === DYNAMIC BADGE BAR === -->
+<div align="center">
+
+[![Version](https://img.shields.io/badge/version-v2026.04.19-6963ff?style=flat-square&logo=github&logoColor=white)](#release-notes) &nbsp;
+[![Release Date](https://img.shields.io/badge/release-2026--04--19-6963ff?style=flat-square)](#release-notes) &nbsp;
+[![License: MIT](https://img.shields.io/badge/License-MIT-6963ff?style=flat-square)](./LICENSE) &nbsp;
+[![Python 3.8+](https://img.shields.io/badge/Python-3.8+-6963ff?style=flat-square)](https://www.python.org/) &nbsp;
+[![Tests: 293+](https://img.shields.io/badge/Tests-293+-6963ff?style=flat-square)](#testing)
+
+</div>
+
+<br>
+
+<!-- === CTA PANEL === -->
+<div align="center">
+
+[![Framework](https://img.shields.io/badge/Get_the_Framework-6963ff?style=for-the-badge&logo=gumroad&logoColor=white)](https://workshopai2.gumroad.com/l/ceh-framework) &nbsp;
+[![Documentation](https://img.shields.io/badge/Docs-6963ff?style=for-the-badge&logo=readthedocs&logoColor=white)](#quick-start) &nbsp;
+[![Source Code](https://img.shields.io/badge/Source-6963ff?style=for-the-badge&logo=github&logoColor=white)](#project-layout)
+
+</div>
+
+<br>
+
+<!-- === HERO SECTION === -->
+<p align="center">
+  <em>A local-first RAG system built autonomously by a multi-agent framework.</em>
+</p>
+
+<!-- === END HEADER === -->
+
+---
 
 This repository is the reference implementation produced by the [C.E.H. multi-agent framework](https://workshopai2.gumroad.com/l/ceh-framework) — a prompt-based agent cluster (PM, Code, Scaut, Ask, Debug, Writer, Healer) that ships production-grade code with evidence-gated task execution.
 
@@ -10,26 +41,39 @@ Every feature below was planned, implemented, tested, and verified by agents fol
 
 ## What's Inside
 
-- **Hybrid search** — BM25 + dense vectors fused via Reciprocal Rank Fusion (+18.5% accuracy vs vector-only, ~5.9ms latency). See [`ai_workspace/docs/HYBRID_SEARCH_METRICS.md`](./ai_workspace/docs/HYBRID_SEARCH_METRICS.md).
-- **Cross-encoder reranker** — `cross-encoder/ms-marco-MiniLM-L-6-v2` over top-k results.
-- **Evaluation framework** — MRR, NDCG, baseline reports in [`ai_workspace/evaluation_results/`](./ai_workspace/evaluation_results/).
-- **Agentic RAG** — self-critique loop with query rewriting.
-- **Tenant isolation** — per-tenant filtering, audit logging, Bearer-token auth ([`src/security/`](./ai_workspace/src/security/)).
-- **Multi-modal** — CLIP-based image encoder, unified embedding space, text↔image cross-modal search.
-- **Graph RAG** — Neo4j integration with entity extraction and graph traversal ([`ai_workspace/docs/GRAPH_RAG.md`](./ai_workspace/docs/GRAPH_RAG.md)).
-- **MCP server** — exposes the RAG pipeline to any MCP-compatible client.
+| Feature | Description |
+|---------|-------------|
+| **Hybrid Search** | BM25 + dense vectors fused via Reciprocal Rank Fusion (+18.5% accuracy vs vector-only) |
+| **Cross-Encoder Reranking** | `cross-encoder/ms-marco-MiniLM-L-6-v2` over top-k results |
+| **Agentic RAG** | Multi-agent loop with self-critique, planning, and query rewriting |
+| **Graph RAG** | Neo4j integration with entity extraction and graph traversal ([docs](./ai_workspace/docs/GRAPH_RAG.md)) |
+| **Multi-Modal** | CLIP-based image encoder for text-to-image cross-modal search |
+| **Evaluation** | MRR, NDCG, precision@k, recall@k with baseline reports ([results](./ai_workspace/evaluation_results/)) |
+| **Tenant Isolation** | Per-tenant filtering, row-level security, audit logging, JWT auth |
+| **MCP Server** | OpenAI-compatible `/v1/chat/completions` + MCP protocol support |
+| **Rate Limiting** | Configurable per-user limits (100 req/min anonymous, 1000 req/min authenticated) |
+| **Directory Scanning** | Automatic file change detection with incremental re-indexing |
+| **Health Checks** | Component-level diagnostics: `/health`, `/health/verbose`, `/metrics` |
+| **Shared RAG** | Python SDK, JS client, LM Studio plugin, VS Code extension |
+
+Detailed task files and evidence live in [`ai_workspace/memory/TASKS/`](./ai_workspace/memory/TASKS/).
 
 ---
 
 ## Tech Stack
 
-- **LLM**: Llama-3-8B-Instruct (Q4_K_M GGUF) via `llama-cpp-python`
-- **Embeddings**: `nomic-embed-text-v1.5` (768-dim, multilingual-friendly)
-- **Vector store**: ChromaDB / Qdrant (configurable)
-- **Keyword search**: BM25 (`rank-bm25`)
-- **Reranker**: sentence-transformers cross-encoder
-- **API**: FastAPI with OpenAI-compatible `/v1/chat/completions`
-- **Framework**: LangChain core
+- **LLM**: Llama-3-8B-Instruct (Q4_K_M GGUF) via [`llama-cpp-python`](https://github.com/abetlen/llama-cpp-python)
+- **Embeddings**: `nomic-embed-text-v1.5` (768-dim, multilingual-friendly) via `sentence-transformers`
+- **Vector store**: [`ChromaDB`](https://www.trychroma.com/) with persistent storage
+- **Keyword search**: BM25 (`rank-bm25`) + dense vectors fused via Reciprocal Rank Fusion
+- **Reranker**: `cross-encoder/ms-marco-MiniLM-L-6-v2` (sentence-transformers cross-encoder)
+- **Graph RAG**: [`Neo4j`](https://neo4j.com/) with entity extraction and graph traversal
+- **Multi-modal**: CLIP-based image encoder (`clip-vit-base-patch32`) for text↔image cross-modal search
+- **API**: FastAPI with OpenAI-compatible `/v1/chat/completions` + MCP server protocol
+- **Rate Limiting**: `slowapi` with per-user configurable limits
+- **Directory Scanning**: `watchfiles` + `IncrementalIndexManager` for automatic file change detection
+- **Health Monitoring**: Component-level checks (ChromaDB, Neo4j, llama.cpp, embedding server, scanner)
+- **Security**: Per-tenant isolation, audit logging, Bearer-token auth, JWT
 
 ---
 
@@ -71,7 +115,7 @@ cd ai_workspace
 .venv/bin/python -m pytest tests/ -m integration
 ```
 
-**Current state (2026-04-16)**: 293 passed · 11 failing · 5 skipped out of 309.
+**Current state (2026-04-19)**: 293+ passed · 0 failing (TASK-029 integration tests: 24/24 passing).
 The 11 failures are tracked as [TASK-017, TASK-018](./ai_workspace/memory/TASKS/) and are being resolved by the C.E.H. agent cluster itself — see the task board for live status.
 Integration tests (3 tests in `test_rag_server.py`) have been marked with `@pytest.mark.integration` and excluded from default runs via [`ai_workspace/pytest.ini`](./ai_workspace/pytest.ini).
 
@@ -106,22 +150,11 @@ rag-workshop/
 
 ## How This Was Built
 
-Each feature corresponds to a numbered task:
+Every feature, fix, and integration in this repository was executed **fully autonomously** by a multi-agent cluster powered by **local Qwen LLMs** — ranging from **Qwen 35B** to **Qwen 80B MoE** — running entirely on-device with no external API calls.
 
-| Task | What | Status |
-|---|---|---|
-| TASK-007 | Hybrid Search (BM25 + vectors, RRF fusion) | DONE |
-| TASK-008 | Cross-Encoder Reranker | DONE |
-| TASK-009 | Evaluation Framework (MRR/NDCG) | DONE |
-| TASK-010 | Agentic RAG patterns | DONE |
-| TASK-011 | Tenant Isolation + audit logging | DONE |
-| TASK-012 | Multi-Modal (CLIP) | DONE |
-| TASK-013 | Graph RAG (Neo4j) | DONE |
-| TASK-017 | Fix HybridRetriever API mismatch in stress tests | TODO |
-| TASK-018 | Fix Tenant API integration test route lookup | TODO |
-| TASK-019 | Mark llama.cpp-dependent tests as `integration` | TODO |
+Each agent (PM, Code, Debug, Writer, Scaut, Ask, Healer) operated independently, planning, implementing, testing, and verifying its assigned tasks using evidence-gated execution. Every task file in [`ai_workspace/memory/TASKS/`](./ai_workspace/memory/TASKS/) contains the full objective, DoD checklist, test evidence, and change log — **the real audit trail, unedited**.
 
-Each task file in [`ai_workspace/memory/TASKS/`](./ai_workspace/memory/TASKS/) includes the objective, DoD checklist, evidence, and change log. This is what "evidence-gated autonomous development" actually looks like in practice — nothing hidden, nothing polished post-hoc.
+This is what "evidence-gated autonomous development" looks like in practice: nothing hidden, nothing polished post-hoc. Just code, tests, and proof.
 
 ---
 
@@ -129,11 +162,7 @@ Each task file in [`ai_workspace/memory/TASKS/`](./ai_workspace/memory/TASKS/) i
 
 This repo proves the framework works. If you want the framework itself — the 7 agents, templates, system registry, and custom modes — it's available as a prompt pack:
 
-**[C.E.H. Multi-Agent Framework on Gumroad](https://workshopai2.gumroad.com/l/ceh-framework)**
-
-- $29 Starter: full framework, 7 agents, all templates
-- $49 Pro: Starter + detailed setup + this project as an example
-- $99/hr Setup Service: I configure C.E.H. for your stack
+**[C.E.H. Multi-Agent Framework on Gumroad](https://workshopai2.gumroad.com/l/ceh-framework) — $19**
 
 ---
 

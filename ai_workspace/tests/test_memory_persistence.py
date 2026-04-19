@@ -319,17 +319,28 @@ class TestMemoryPersistenceMemoryFallback:
         assert len(loaded) == 1
         assert loaded[0].content == "Test"
     
-    def test_memory_fallback_no_file_created(self, tmp_path):
-        """Verify no file is created with memory fallback."""
+    def test_memory_fallback_persists_to_disk(self, tmp_path):
+        """Verify memory fallback DOES persist to disk (TASK-027 fix).
+        
+        After TASK-027 fix, use_memory_fallback=True still persists data to disk.
+        The difference is that reads are served from memory cache for performance.
+        """
         persistence = MemoryPersistence(
-            storage_path=str(tmp_path / "should_not_exist.json"),
-            use_memory_fallback=True
+            storage_path=str(tmp_path / "fallback_persist.json"),
+            use_memory_fallback=True,
+            auto_save=True
         )
         
         messages = [Message(role="user", content="Test", timestamp="2026-04-15T10:00:00")]
         persistence.save_conversation(messages, "test")
         
-        assert not os.path.exists(str(tmp_path / "should_not_exist.json"))
+        # File SHOULD be created with use_memory_fallback=True (TASK-027 fix)
+        assert os.path.exists(str(tmp_path / "fallback_persist.json"))
+        
+        # Verify file contains valid JSON with our data
+        with open(str(tmp_path / "fallback_persist.json"), 'r') as f:
+            data = json.load(f)
+        assert "conversation_test" in data
     
     def test_memory_fallback_clear(self):
         """Verify memory fallback can be cleared."""

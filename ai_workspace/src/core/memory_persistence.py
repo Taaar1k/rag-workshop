@@ -6,6 +6,9 @@ Implements session state persistence for conversation history, user context, and
 import json
 import os
 import time
+import threading
+import uuid
+import tempfile
 from pathlib import Path
 from typing import List, Dict, Optional, Any
 from dataclasses import dataclass, asdict, field
@@ -64,6 +67,17 @@ class MemoryPersistence:
     """
     Memory persistence manager for RAG system.
     Supports both file-based and in-memory storage.
+    
+    Persistence behavior:
+    - use_memory_fallback=False: Full file-based persistence with atomic writes and fsync.
+      All data is persisted to disk on every save operation.
+    - use_memory_fallback=True: In-memory storage with disk persistence. Data is loaded
+      from disk at startup (if file exists) and persisted to disk on every save, but
+      reads are served from memory for performance. This is useful for high-throughput
+      scenarios where you want fast reads but still need disk persistence.
+    
+    Note: Both modes persist data to disk when auto_save=True. The difference is only
+    in how reads are served (memory cache vs. direct file reads).
     """
     
     def __init__(
@@ -76,23 +90,26 @@ class MemoryPersistence:
         Initialize memory persistence.
         
         Args:
-            storage_path: Path to persistence file (JSON format)
-            use_memory_fallback: Use in-memory storage instead of file
-            auto_save: Automatically save changes
+            storage_path: Path to persistence file (JSON format). Data is persisted
+                atomically with fsync on every save operation.
+            use_memory_fallback: If True, load data from disk at startup (if file exists)
+                but keep in memory cache for fast reads. Data IS still persisted to disk
+                on every save — this is a performance optimization, not a memory-only mode.
+                If False, use traditional file-based persistence with direct file reads.
+            auto_save: Automatically save changes to disk after each save operation.
+                When True, all save operations use atomic writes with fsync.
         """
         self.storage_path = storage_path or "./ai_workspace/memory/persistence.json"
         self.use_memory_fallback = use_memory_fallback
         self.auto_save = auto_save
         self.memory_cache: Dict[str, Any] = {}
         self._memory_cache_loaded_from_disk: bool = False
+        self._lock = threading.RLock()
         self._ensure_storage_directory()
         
-        # Load existing data if file exists
-        if not self.use_memory_fallback and os.path.exists(self.storage_path):
+        # Load existing data from disk if file exists (both modes)
+        if os.path.exists(self.storage_path):
             self._load_from_file()
-        elif self.use_memory_fallback and self.auto_save and os.path.exists(self.storage_path):
-            # Pre-load memory cache from disk when using memory fallback with auto_save
-            self._load_memory_cache_from_disk()
     
     def _ensure_storage_directory(self) -> None:
         """Ensure storage directory exists."""
@@ -110,14 +127,27 @@ class MemoryPersistence:
             self.memory_cache = {}
     
     def _write_to_file(self, key: str, data: Dict[str, Any]) -> None:
-        """Write data to persistent storage."""
+        """Write data to persistent storage with atomic write and fsync.
+        
+        This method ensures data durability by:
+        1. Writing to a temporary file first
+        2. Flushing and syncing to disk with fsync()
+        3. Atomically renaming the temp file to the target path
+        
+        Both use_memory_fallback=True and False persist to disk. The difference
+        is that use_memory_fallback=True also keeps data in memory cache for
+        faster reads.
+        """
+        # Always update memory cache (both modes)
+        self.memory_cache[key] = data
+        
         if self.use_memory_fallback:
-            self.memory_cache[key] = data
+            # In fallback mode, we already updated memory_cache above.
+            # Still persist to disk for durability.
+            self._save_to_file()
             return
         
-        # Ensure directory exists
-        self._ensure_storage_directory()
-        
+        # File-based mode: load existing, update, and save atomically
         # Load existing data
         if os.path.exists(self.storage_path):
             try:
@@ -128,16 +158,16 @@ class MemoryPersistence:
         else:
             storage = {}
         
-        # Update and save
+        # Update and save atomically
         storage[key] = data
-        with open(self.storage_path, 'w') as f:
-            json.dump(storage, f, indent=2, default=str)
+        self._save_to_file_data(storage)
     
     def _write_to_file_disk_only(self, key: str, data: Dict[str, Any]) -> None:
-        """Write data to disk without using memory cache (used when use_memory_fallback=True)."""
-        # Ensure directory exists
-        self._ensure_storage_directory()
+        """Write data to disk without using memory cache (used when use_memory_fallback=True).
         
+        This method persists data directly to disk using atomic writes and fsync,
+        without updating the in-memory cache.
+        """
         # Load existing data
         if os.path.exists(self.storage_path):
             try:
@@ -148,17 +178,60 @@ class MemoryPersistence:
         else:
             storage = {}
         
-        # Update and save
+        # Update and save atomically
         storage[key] = data
-        with open(self.storage_path, 'w') as f:
-            json.dump(storage, f, indent=2, default=str)
+        self._save_to_file_data(storage)
+    
+    def _save_to_file_data(self, storage: Dict[str, Any]) -> None:
+        """Save data dict to disk with atomic write and fsync.
+        
+        Writes to a temporary file first, then atomically renames it to
+        the storage path. Uses fsync() to ensure data is flushed to disk.
+        
+        Args:
+            storage: The complete storage dictionary to persist.
+        """
+        storage_dir = os.path.dirname(self.storage_path)
+        if storage_dir:
+            os.makedirs(storage_dir, exist_ok=True)
+            
+        # Use a unique temporary file to avoid concurrency issues
+        tmp_path = os.path.join(storage_dir, f".{os.path.basename(self.storage_path)}.{uuid.uuid4().hex}.tmp")
+        data = json.dumps(storage, indent=2, default=str)
+        
+        try:
+            # Write to temp file first
+            with open(tmp_path, 'w') as f:
+                f.write(data)
+                f.flush()
+                os.fsync(f.fileno())  # Ensure data is on disk
+            
+            # Atomic rename
+            os.replace(tmp_path, self.storage_path)
+        except Exception as e:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+            raise e
+        finally:
+            # Mark cache as loaded from disk
+            self._memory_cache_loaded_from_disk = True
+    
+    def _save_to_file(self) -> None:
+        """Save current memory_cache to disk with atomic write and fsync.
+        
+        This is the primary persistence method used when use_memory_fallback=True.
+        It writes the entire memory_cache to disk atomically.
+        """
+        self._save_to_file_data(self.memory_cache)
     
     def _read_from_file(self, key: str, subkey: str = None) -> Optional[Dict[str, Any]]:
-        """Read data from persistent storage."""
+        """Read data from persistent storage.
+        
+        When use_memory_fallback=True, reads from the in-memory cache (which was
+        loaded from disk at startup and updated on every save).
+        When use_memory_fallback=False, reads directly from the file.
+        """
         if self.use_memory_fallback:
-            # When auto_save=True, load from disk into memory cache on first access
-            if self.auto_save and not self._memory_cache_loaded_from_disk:
-                self._load_memory_cache_from_disk()
             return self.memory_cache.get(key, {})
         
         if not os.path.exists(self.storage_path):
@@ -178,7 +251,11 @@ class MemoryPersistence:
             return None
     
     def _load_memory_cache_from_disk(self) -> None:
-        """Load memory cache from disk (used when use_memory_fallback=True with auto_save=True)."""
+        """Load memory cache from disk.
+        
+        This method is kept for backward compatibility. Data is now loaded
+        from disk in __init__ for both use_memory_fallback=True and False modes.
+        """
         if not os.path.exists(self.storage_path):
             return
         

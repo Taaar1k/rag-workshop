@@ -3,3 +3,4 @@ sentence-transformers
 scikit-learn
 numpy
 chromadb
+slowapi>=0.1.6
