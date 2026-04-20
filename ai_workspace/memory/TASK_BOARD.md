@@ -23,6 +23,7 @@
 | | | TASK-037 | Fix venv deps + test discovery (7 collection errors) | Debug | strict | 2026-04-20 | 401/409 collected, 0 errors, 0 sys.path.insert |
 | | | TASK-038 | Remove sync-in-async blocking | Code | strict | 2026-04-20 | 0 requests.* in async paths, 28/28 health tests pass |
 | | | TASK-039 | Narrow bare except Exception in API layer | Code | strict | 2026-04-20 | 0 except Exception hits, 13 passed, 3 new error path tests |
+| | | TASK-041 | Document v0.1.0 Stable Release | Writer | light | 2026-04-20 | RELEASE_NOTES_v0.1.0.md created, README.md updated, 6/6 DoD verified |
 
 ## DEBUG_QUEUE
 <!-- | Task ID | Title | Assigned To | Severity | Created | -->

@@ -69,4 +69,5 @@
 - 2026-04-20: TASK-037 DONE — Fixed 5 missing deps, removed 18 sys.path.insert, fixed pytest.ini
 - 2026-04-20: SPEC-2026-04-20-PRODUCTION-HARDENING APPROVED — 5 sub-tasks created
 - 2026-04-19: TASK-030 DONE — Added comprehensive health check endpoints
+- 2026-04-20: TASK-041 DONE — Documented v0.1.0 Stable release (RELEASE_NOTES_v0.1.0.md created, README.md updated)
 - 2026-04-19: VERIFICATION COMPLETE — All 4 tasks verified (TASK-027 through TASK-030)
