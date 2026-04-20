@@ -384,6 +384,15 @@ Each feature corresponds to a numbered task implemented by the C.E.H. agent clus
 
 ## Recent Changes
 
+- **v0.1.0 Stable (2026-04-20)** — **Production Hardening Release.** First stable release marking completion of a 14-task hardening cycle (TASK-027 through TASK-040). Key changes:
+  - **Security:** Removed hardcoded Neo4j password (TASK-035); replaced open CORS `allow_origins=["*"]` with env-driven whitelist (TASK-036); narrowed 14 bare `except Exception` blocks to specific types (TASK-039).
+  - **Performance:** Replaced sync `requests` with `httpx.AsyncClient` in health checks; wrapped Qdrant `upsert()` in `asyncio.to_thread` (TASK-038).
+  - **Test Infrastructure:** Fixed 5 missing dependencies; removed 18 `sys.path.insert` calls; 401/409 tests collected, 0 errors (TASK-037).
+  - **Dead Code Removal:** Removed `ContextMemory` and `SessionMemory` subsystems (747 → 382 LOC in `memory_manager.py`) (TASK-040).
+  - **Reliability:** Fixed MemoryPersistence data loss with atomic writes + `fsync()` (TASK-027); added API rate limiting (TASK-028); integrated directory scanner with FastAPI lifecycle (TASK-029); added comprehensive health check endpoints (TASK-030).
+  - **Documentation:** Professional README header with dynamic badges, CTA, hero section (TASK-034).
+  - Full release notes: [`ai_workspace/docs/RELEASE_NOTES_v0.1.0.md`](ai_workspace/docs/RELEASE_NOTES_v0.1.0.md)
+
 - **v2026.04.20** — **Breaking:** Removed unused `ContextMemory` and `SessionMemory` subsystems from [`memory_manager.py`](ai_workspace/src/core/memory_manager.py) (dead code with misleading docstrings). `MemoryConfig.embedding_model` default aligned to `nomic-ai/nomic-embed-text-v1.5` via `EMBEDDING_MODEL_NAME` env var. If you depended on them, pin to the previous release; a real implementation will be written when requirements are concrete.
 
 Every feature, fix, and integration above was executed **fully autonomously** by a multi-agent cluster (PM, Code, Debug, Writer, Scaut, Ask, Healer) running on **local Qwen LLMs** — from **Qwen 35B** to **Qwen 80B MoE**, entirely on-device, no external API calls.
