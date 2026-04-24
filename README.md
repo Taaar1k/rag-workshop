@@ -405,7 +405,7 @@ Each task file in [`ai_workspace/memory/TASKS/`](./ai_workspace/memory/TASKS/) c
 
 This repo proves the framework works. If you want the framework itself — the 7 agents, templates, system registry, and custom modes — it's available as a prompt pack:
 
-**[C.E.H. Multi-Agent Framework on Gumroad](https://workshopai2.gumroad.com/l/ceh-framework) — $19**
+**[C.E.H. Multi-Agent Framework on Gumroad](https://workshopai2.gumroad.com/l/ceh-framework)**
 
 ---
 
