@@ -219,12 +219,14 @@ def main():
     parser = argparse.ArgumentParser(
         description="RAG CLI - Quick setup and management",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
+epilog="""
 Examples:
-  rag status              # Check all servers
-  rag test                # Test embedding generation
-  rag set-embedding local # Set local API (local_api or sentence_transformers)
-  rag config             # Show current configuration
+  rag status          # Check all servers
+  rag test           # Test embedding generation
+  rag set local     # Set local API
+  rag config        # Show configuration
+  rag start         # Start RAG server
+  rag stop          # Stop servers
         """
     )
     
@@ -247,6 +249,9 @@ Examples:
     start_parser = subparsers.add_parser("start", help="Start servers")
     start_parser.add_argument("--server", choices=["embed", "llm", "qdrant", "rag", "all"], default="all")
     
+    # stop
+    subparsers.add_parser("stop", help="Stop all servers")
+    
     args = parser.parse_args()
     
     if args.command == "status" or args.command is None:
@@ -263,10 +268,34 @@ Examples:
         show_config()
     
     elif args.command == "start":
-        if args.server in ["embed", "all"]:
-            info("Use separate scripts to start embed/LLM servers")
-        if args.server in ["rag", "all"]:
-            info("Start rag server: cd ai_workspace && uvicorn src.api.rag_server:app")
+        rag_root = get_rag_root()
+        server_type = args.server
+        
+        if server_type in ["embed", "all"]:
+            print("⚠️ Start embed server separately:")
+            print("   llama-server -m models/embeddings/*.gguf --port 8090")
+        
+        if server_type in ["llm", "all"]:
+            print("⚠️ Start LLM server separately:")
+            print("   llama-server -m models/llm/*.gguf --port 8080")
+        
+        if server_type in ["rag", "all"]:
+            print("\n📤 Starting RAG server on port 8000...")
+            print("Run this command in terminal:\n")
+            print(f"   cd {rag_root}")
+            print(f"   PYTHONPATH={rag_root} uvicorn src.api.rag_server:app --host 0.0.0.0 --port 8000")
+            print("\nOr use: rag-start (bash alias)")
+    
+    elif args.command == "stop":
+        import subprocess
+        import signal
+        
+        # Kill uvicorn processes
+        try:
+            subprocess.run(["pkill", "-f", "uvicorn"], check=False)
+            ok("RAG server stopped")
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":

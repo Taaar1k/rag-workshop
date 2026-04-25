@@ -23,23 +23,10 @@ rag() {
 }
 
 rag-start() {
-    cd "$RAG_ROOT" && uvicorn src.api.rag_server:app --host 0.0.0.0 --port 8000
-}
-
-rag-test() {
-    cd "$RAG_ROOT" && python scripts/rag_cli.py test
-}
-
-rag-status() {
-    cd "$RAG_ROOT" && python scripts/rag_cli.py status
-}
-
-rag-config() {
-    cd "$RAG_ROOT" && python scripts/rag_cli.py config
+    cd "$RAG_ROOT" && PYTHONPATH="$RAG_ROOT" uvicorn src.api.rag_server:app --host 0.0.0.0 --port 8000
 }
 
 alias rag-set="rag set-embedding"
-alias rag-on="rag-start"
 EOF
     
     echo "Installed to $shellrc"
