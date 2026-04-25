@@ -19,21 +19,16 @@ def get_rag_root() -> Path:
     if rag_root:
         return Path(rag_root)
     
-    # Try to find relative to this script
+    # Try to find relative to this script (scripts/ is inside ai_workspace/)
     script_dir = Path(__file__).parent
-    possible_paths = [
-        script_dir.parent / "ai_workspace",
-        script_dir / ".." / "ai_workspace",
-    ]
-    for p in possible_paths:
-        if p.exists():
-            return p
+    rag_path = script_dir.parent
     
-    # Default fallback (this shouldn't be hardcoded in production)
+    if (rag_path / "src").exists():
+        return rag_path
+    
+    # Default fallback
     return Path("/home/tarik/Sandbox/my-plugin/rag-project/ai_workspace")
 
-
-GREEN = "\033[92m"
 
 GREEN = "\033[92m"
 RED = "\033[91m"
@@ -225,7 +220,7 @@ Examples:
   rag test           # Test embedding generation
   rag set local     # Set local API
   rag config        # Show configuration
-  rag start         # Start RAG server
+  rag start         # Show how to start server
   rag stop          # Stop servers
         """
     )
@@ -246,13 +241,28 @@ Examples:
     subparsers.add_parser("config", help="Show configuration")
     
     # start
-    start_parser = subparsers.add_parser("start", help="Start servers")
-    start_parser.add_argument("--server", choices=["embed", "llm", "qdrant", "rag", "all"], default="all")
+    start_parser = subparsers.add_parser("start", help="Start RAG server", add_help=False)
     
     # stop
     subparsers.add_parser("stop", help="Stop all servers")
-    
+
     args = parser.parse_args()
+    
+    # Handle start specially for help
+    if args.command == "start":
+        rag_root = get_rag_root()
+        print(f"""
+{BOLD}RAG Server:{RESET}
+
+To start the server, run in terminal:
+
+  cd {rag_root}
+  PYTHONPATH={rag_root} uvicorn src.api.rag_server:app --host 0.0.0.0 --port 8000
+
+Options:
+  -h, --help    Show this help message
+""")
+        return
     
     if args.command == "status" or args.command is None:
         status()
@@ -266,25 +276,6 @@ Examples:
     
     elif args.command == "config":
         show_config()
-    
-    elif args.command == "start":
-        rag_root = get_rag_root()
-        server_type = args.server
-        
-        if server_type in ["embed", "all"]:
-            print("⚠️ Start embed server separately:")
-            print("   llama-server -m models/embeddings/*.gguf --port 8090")
-        
-        if server_type in ["llm", "all"]:
-            print("⚠️ Start LLM server separately:")
-            print("   llama-server -m models/llm/*.gguf --port 8080")
-        
-        if server_type in ["rag", "all"]:
-            print("\n📤 Starting RAG server on port 8000...")
-            print("Run this command in terminal:\n")
-            print(f"   cd {rag_root}")
-            print(f"   PYTHONPATH={rag_root} uvicorn src.api.rag_server:app --host 0.0.0.0 --port 8000")
-            print("\nOr use: rag-start (bash alias)")
     
     elif args.command == "stop":
         import subprocess

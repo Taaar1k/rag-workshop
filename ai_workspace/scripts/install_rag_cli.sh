@@ -22,10 +22,6 @@ rag() {
     cd "$RAG_ROOT" && python scripts/rag_cli.py "${1:-status}"
 }
 
-rag-start() {
-    cd "$RAG_ROOT" && PYTHONPATH="$RAG_ROOT" uvicorn src.api.rag_server:app --host 0.0.0.0 --port 8000
-}
-
 alias rag-set="rag set-embedding"
 EOF
     
