@@ -14,12 +14,22 @@ import httpx
 
 def get_rag_root() -> Path:
     """Get RAG_ROOT path."""
-    # Check env
+    # Check env first
     rag_root = os.environ.get("RAG_ROOT")
     if rag_root:
         return Path(rag_root)
     
-    # Default path
+    # Try to find relative to this script
+    script_dir = Path(__file__).parent
+    possible_paths = [
+        script_dir.parent / "ai_workspace",
+        script_dir / ".." / "ai_workspace",
+    ]
+    for p in possible_paths:
+        if p.exists():
+            return p
+    
+    # Default fallback (this shouldn't be hardcoded in production)
     return Path("/home/tarik/Sandbox/my-plugin/rag-project/ai_workspace")
 
 
